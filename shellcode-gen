@@ -29,16 +29,13 @@ exit_with_failure() {
 }
 
 echo_with_highlight() {
-	search_arr=("${@:2}")
-	search_strs=$(IFS='|'; echo "${search_arr[*]}")
-
-	echo "$(echo "$1" | sed -E "s/${search_strs:0:$((${#search_strs}-1))}/$(tput setaf 1)&$(tput sgr0)/g")"
+	echo "$1" | perl -pe 'BEGIN { $regex = sprintf q/(\s%s\s)/, join q/\s|\s/, @ARGV; ($red, $reset, @ARGV) = ("\e[31m","\e[0m") } s/$regex/$red$1$reset/gi' "${@:2}"
 }
 
 objdump_with_highlight() {
 	[ $# -ne 1 ] && exit 1
 
-	whitespace=('09 ' '0a ' '0b ' '0c ' '0d ' '20 ')
+	whitespace=('09' '0a' '0b' '0c' '0d' '20')
 	object_file="$1"
 
 	function_body() {
@@ -67,7 +64,7 @@ run() {
 		ld -m "elf_$arch" -o "./$file_executable" "./$object_file"
 
 		echo [-------------------------- run YOUR CODE --------------------------]
-		./$file_executable
+		"./$file_executable"
 		echo [-------------------------------------------------------------------]
 		echo
 	}
@@ -121,21 +118,21 @@ main() {
 		is_from_stdin=true
 		contents=''
 
-		while read line; do
+		while read -r line; do
 			contents="$contents$line\n"
 		done
 
 		printf '%b' "$contents" > "$target"
 
-		unset $contents
-		unset $line
+		unset "$contents"
+		unset "$line"
 	fi
 
 	arch_num=$(perl -e 'print { x86_64 => 64, i386 => 32 }->{$ARGV[0]} // ""' "$arch")
 
 	echo "$target" | grep -Pq '^.+\.s$' || exit_with_failure "The file must have the extension 's'."
-	[ -f "$target" -a -r "$target" ] || exit_with_failure 'This is not a file or not readable.'
-	[ "$syntax" = "att" -o "$syntax" = "intel" ] || exit_with_failure "Unsupported assembly syntax. Must be either 'att' or 'intel'."
+	[ -f "$target" ] && [ -r "$target" ] || exit_with_failure 'This is not a file or not readable.'
+	[ "$syntax" = "att" ] ||  [ "$syntax" = "intel" ] || exit_with_failure "Unsupported assembly syntax. Must be either 'att' or 'intel'."
 	echo "$literal_type" | grep -Pq '^(str|arr|bytes)$' || exit_with_failure "Unsupported literal_type. Must be among 'str', 'arr', or 'bytes'."
 	[ X"$arch_num" = X ] && exit_with_failure "Unsupported architecture. Must be either 'x86_64' or 'i386'."
 
@@ -143,7 +140,7 @@ main() {
 	bin_file=${raw_name}.bin
 	object_file=${raw_name}.o
 
-	as --$arch_num -o "$object_file" "$target"
+	as --"$arch_num" -o "$object_file" "$target"
 	objdump_with_highlight "$object_file"
 	$run_enabled && run "$raw_name" "$object_file"
 	objcopy --dump-section .text="$bin_file" "$object_file"
@@ -151,9 +148,9 @@ main() {
 	split=$(hexdump -ve '/1 "%02X" " "' "$bin_file")
 
 	case "$literal_type" in
-		str)   perl -e 'print join("", map { "\\x$_" } split(" ", $ARGV[0]))' "$split";;
-		arr)   perl -e 'print join(", ", map { "0x$_" } split(" ", $ARGV[0]))' "$split";;
-		bytes) perl -e 'print pack("H*", join("", split(" ", $ARGV[0])))' "$split";;
+		str)   perl -e 'print join "", map { "\\x$_" } split " ", $ARGV[0]' "$split";;
+		arr)   perl -e 'print join ", ", map { "0x$_" } split " ", $ARGV[0]' "$split";;
+		bytes) perl -e 'print pack "H*", join "", split " ", $ARGV[0]' "$split";;
 	esac
 
 	if ! $keep_enabled; then
