@@ -48,7 +48,7 @@ objdump_with_highlight() {
 		echo "  0x09(Horizontal Tab), 0x0A(Line Feed),       0x0B(Vertical Tab),"
 		echo "  0x0C(Form Feed),      0x0D(Carriage Return), 0x20(Space)"
 		echo
-		echo [-------------------------------------------------------------------]
+		echo [--------------------------------------------------------------------]
 		echo
 	}
 
@@ -63,9 +63,9 @@ run() {
 	function_body() {
 		ld -m "elf_$arch" -o "./$file_executable" "./$object_file"
 
-		echo [-------------------------- run YOUR CODE --------------------------]
+		echo [--------------------------- RUN YOUR CODE --------------------------]
 		"./$file_executable"
-		echo [-------------------------------------------------------------------]
+		echo [--------------------------------------------------------------------]
 		echo
 	}
 

@@ -82,7 +82,7 @@ $ xxd output
 
 ### Run Your Shellcode
 ```
-./shellcode-gen -r -a i386 execve.s      
+$ ./shellcode-gen -r -a i386 execve.s      
 [-------------------- ASSEMBLY WITH MACHINE CODE --------------------]
 
 execve.o:     file format elf32-i386
