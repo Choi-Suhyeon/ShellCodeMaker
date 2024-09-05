@@ -141,7 +141,8 @@ main() {
 	arch_num=$(perl -e 'print { x86_64 => 64, i386 => 32 }->{$ARGV[0]} // ""' "$arch")
 
 	echo "$target" | grep -Pq '^.+\.s$' || exit_with_failure "The file must have the extension 's'."
-	[ -f "$target" ] && [ -r "$target" ] || exit_with_failure 'This is not a file or not readable.'
+	[ -e "$target" ] && [ -f "$target" ] || exit_with_failure "The regular file named '$target' does not exist."
+	[ -r "$target" ] || exit_with_failure 'This file is not readable.'
 	[ "$syntax" = "att" ] ||  [ "$syntax" = "intel" ] || exit_with_failure "Unsupported assembly syntax. Must be either 'att' or 'intel'."
 	echo "$literal_type" | grep -Pq '^(str|arr|bytes)$' || exit_with_failure "Unsupported literal_type. Must be among 'str', 'arr', or 'bytes'."
 	[ X"$arch_num" = X ] && exit_with_failure "Unsupported architecture. Must be either 'x86_64' or 'i386'."
@@ -150,7 +151,7 @@ main() {
 	bin_file=${raw_name}.bin
 	object_file=${raw_name}.o
 
-	as --"$arch_num" -o "$object_file" "$target"
+	as --"$arch_num" -o "$object_file" "$target" || exit_with_failure 'Assembly failed'
 	objdump_with_highlight "$object_file"
 	$run_enabled && run "$raw_name" "$object_file"
 	objcopy --dump-section .text="$bin_file" "$object_file"
