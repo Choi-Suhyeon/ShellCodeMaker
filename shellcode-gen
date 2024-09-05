@@ -14,11 +14,12 @@ exit_with_help() {
 	echo_help() {
 		echo "$0 TARGET_FILE_NAME [-a -t -s -r -k]" 
 		echo "$0 -h" 
+		echo
 		echo "<options>" 
 		echo "TARGET_FILE_NAME       : (Optional) Specify the file with the extension 's' for generating shellcode."
-		echo "-a --arch ARCHITECTURE : (Optional) Specify architecture(x86_64(default) or i386)."
-		echo "-t --type LITERAL_TYPE : (Optional) Specify the literal type(str(default), arr, or bytes) of bytes of shellcode to output."
-		echo "-s --syntax SYNTAX     : (Optional) Specify syntax(att(default) or intel)."
+		echo "-a --arch ARCHITECTURE : (Optional) Specify architecture(x86_64 or i386). If this option is unspecified, the default is set to 'x86_64'."
+		echo "-t --type LITERAL_TYPE : (Optional) Specify the literal type(str, arr, or bytes) of bytes of shellcode to output. If this option is unspecified, the default is set to 'str'."
+		echo "-s --syntax SYNTAX     : (Optional) Specify syntax(att or intel). If this option is unspecified, the default is set to 'att'."
 		echo "-r --run               : (Optional) Run shell code by making it an executable file."
 		echo "-k --keep              : (Optional) Keep the intermediate files."
 		echo

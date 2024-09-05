@@ -12,11 +12,14 @@
 
 ## Useage Guide
 ```
+shellcode-gen TARGET_FILE_NAME [-a -t -s -r -k]
+shellcode-gen -h
+
 <options>
 TARGET_FILE_NAME       : (Optional) Specify the file with the extension 's' for generating shellcode.
--a --arch ARCHITECTURE : (Optional) Specify architecture(x86_64(default) or i386).
--t --type LITERAL_TYPE : (Optional) Specify the literal type(str(default), arr, or bytes) of bytes of shellcode to output.
--s --syntax SYNTAX     : (Optional) Specify syntax(att(default) or intel).
+-a --arch ARCHITECTURE : (Optional) Specify architecture(x86_64 or i386). If this option is unspecified, the default is set to 'x86_64'.
+-t --type LITERAL_TYPE : (Optional) Specify the literal type(str, arr, or bytes) of bytes of shellcode to output. If this option is unspecified, the default is set to 'str'.
+-s --syntax SYNTAX     : (Optional) Specify syntax(att or intel). If this option is unspecified, the default is set to 'att'.
 -r --run               : (Optional) Run shell code by making it an executable file.
 -k --keep              : (Optional) Keep the intermediate files.
 
@@ -26,6 +29,7 @@ TARGET_FILE_NAME       : (Optional) Specify the file with the extension 's' for 
 0 : Success.
 1 : Failure.
 ```
+
 - Assembly code can be provided via stdin if a target file name is not specified.
 - The location of the target file name is adjustable, similar to other options.
 - Only the final output is sent to stdout; all other messages are directed to stderr.
