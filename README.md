@@ -30,6 +30,7 @@ TARGET_FILE_NAME       : (Optional) Specify the file with the extension 's' for 
 1 : Failure.
 ```
 
+- If the '-a', '-t', or '-s' options are not specified, the defaults will be 'x86_64', 'str', and 'att', respectively.
 - Assembly code can be provided via stdin if a target file name is not specified.
 - The location of the target file name is adjustable, similar to other options.
 - Only the final output is sent to stdout; all other messages are directed to stderr.
