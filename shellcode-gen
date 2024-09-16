@@ -44,15 +44,19 @@ echo_with_highlight() {
 }
 
 objdump_with_highlight() {
-	[ $# -ne 1 ] && exit 1
+	[ $# -ne 2 ] && exit 1
 
 	whitespace=('09' '0a' '0b' '0c' '0d' '20')
 	object_file="$1"
+	syntax="$2"
+	objdump_result=$(objdump -M "$syntax" -d "$object_file" 2>&1) 
+
+	[ $? -eq 0 ] || exit 1
 
 	function_body() {
 		echo [-------------------- ASSEMBLY WITH MACHINE CODE --------------------]
 
-		echo_with_highlight "$(objdump -d "$object_file")" "${whitespace[@]}"
+		echo_with_highlight "$objdump_result" "${whitespace[@]}"
 
 		echo
 		echo NOTE : Whitespace in C : 
@@ -152,8 +156,8 @@ main() {
 	bin_file=${raw_name}.bin
 	object_file=${raw_name}.o
 
-	as --"$arch_num" -o "$object_file" "$target" || exit_with_failure 'Assembly failed'
-	objdump_with_highlight "$object_file"
+	as --"$arch_num" -o "$object_file" "$target" 2> /dev/null || exit_with_failure 'Assembly failed'
+	objdump_with_highlight "$object_file" "$syntax" || exit_with_failure 'Objdump failed'
 	$run_enabled && run "$raw_name" "$object_file"
 	objcopy --dump-section .text="$bin_file" "$object_file"
 
