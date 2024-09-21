@@ -16,14 +16,15 @@ exit_with_help() {
 		echo "$0 -h" 
 		echo
 		echo "<options>" 
-		echo "TARGET_FILE_NAME       : (Optional) Specify the file with the extension 's' for generating shellcode."
-		echo "-a --arch ARCHITECTURE : (Optional) Specify architecture(x86_64 or i386). If this option is unspecified, the default is set to 'x86_64'."
-		echo "-t --type LITERAL_TYPE : (Optional) Specify the literal type(str, arr, or bytes) of bytes of shellcode to output. If this option is unspecified, the default is set to 'str'."
-		echo "-s --syntax SYNTAX     : (Optional) Specify syntax(att or intel). If this option is unspecified, the default is set to 'att'."
-		echo "-r --run               : (Optional) Run shell code by making it an executable file."
-		echo "-k --keep              : (Optional) Keep the intermediate files."
+		echo "TARGET_FILE_PATH         : (Optional) Specify the file with the extension 's' for generating shellcode."
+		echo "-a --arch ARCHITECTURE   : (Optional) Specify architecture(x86_64(default) or i386)."
+		echo "-t --type LITERAL_TYPE   : (Optional) Specify the literal type(str(default), arr, or bytes) of bytes of shellcode to output."
+		echo "-s --syntax SYNTAX       : (Optional) Specify syntax(att(default) or intel)."
+		echo "-b --blacklist FILE_PATH : (Optional) Specify the file containing the blacklist for bytes."
+		echo "-r --run                 : (Optional) Run shell code by making it an executable file."
+		echo "-k --keep                : (Optional) Keep the intermediate files."
 		echo
-		echo "-h --help              : Print this message and then exit."
+		echo "-h --help                : Print this message and then exit."
 		echo
 		echo "<exit code>" 
 		echo 0 : Success. 
@@ -40,15 +41,17 @@ exit_with_failure() {
 }
 
 echo_with_highlight() {
+	[ $# -lt 2 ] && exit 1
+
 	echo "$1" | perl -pe 'BEGIN { $regex = sprintf q/(\s%s\s)/, join q/\s|\s/, @ARGV; ($red, $reset, @ARGV) = ("\e[31m","\e[0m") } s/$regex/$red$1$reset/gi' "${@:2}"
 }
 
 objdump_with_highlight() {
-	[ $# -ne 2 ] && exit 1
+	[ $# -ne 3 ] && exit 1
 
-	whitespace=('09' '0a' '0b' '0c' '0d' '20')
 	object_file="$1"
 	syntax="$2"
+	blacklist=($3)
 	objdump_result=$(objdump -M "$syntax" -d "$object_file" 2>&1) 
 
 	[ $? -eq 0 ] || exit 1
@@ -56,7 +59,7 @@ objdump_with_highlight() {
 	function_body() {
 		echo [-------------------- ASSEMBLY WITH MACHINE CODE --------------------]
 
-		echo_with_highlight "$objdump_result" "${whitespace[@]}"
+		echo_with_highlight "$objdump_result" "${blacklist[@]}"
 
 		echo
 		echo NOTE : Whitespace in C : 
@@ -68,6 +71,13 @@ objdump_with_highlight() {
 	}
 
 	function_body >&2
+}
+
+echo_bytes_blacklist() {
+	[ $# -ne 1 ] && exit 1
+
+	printf '09 0a 0b 0c 0d 20 '
+	[ X$1 != X ] && perl -e 'print join q/ /, map { s/(\#|\/\/).*|0[xX]|,/ /g; map lc, grep !/^\s*$/, split /\s+/ } <>' "$1"
 }
 
 run() {
@@ -88,8 +98,9 @@ run() {
 }
 
 main() {
-	literal_type=str   syntax=att         arch=x86_64       target=''
 	help_enabled=false keep_enabled=false run_enabled=false is_from_stdin=false
+	literal_type=str   syntax=att         arch=x86_64
+	target=''          blacklist_path=''
 	argc=$#
 
 	while [ $# -gt 0 ]; do
@@ -104,6 +115,10 @@ main() {
 				;;
 			-s|--syntax)
 				syntax=$2
+				shift 2
+				;;
+			-b|--blacklist)
+				blacklist_path=$2
 				shift 2
 				;;
 			-k|--keep)
@@ -155,9 +170,10 @@ main() {
 	raw_name=${target%.s}
 	bin_file=${raw_name}.bin
 	object_file=${raw_name}.o
+	blacklist=$(echo_bytes_blacklist "$blacklist_path")
 
 	as --"$arch_num" -o "$object_file" "$target" 2> /dev/null || exit_with_failure 'Assembly failed'
-	objdump_with_highlight "$object_file" "$syntax" || exit_with_failure 'Objdump failed'
+	objdump_with_highlight "$object_file" "$syntax" "$blacklist" || exit_with_failure 'Objdump failed'
 	$run_enabled && run "$raw_name" "$object_file"
 	objcopy --dump-section .text="$bin_file" "$object_file"
 

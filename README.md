@@ -1,6 +1,10 @@
 # shellcodeGen
   This shell script facilitates the generation of shellcode. It assists in crafting shellcode effortlessly from stdin or a file with the extension 's', which contains code written in either att or intel syntax.
 
+## Version
+
+6.2.0 (2024.09.21.)
+
 ## Programs Used Within The Program
   Many additional programs have been utilized; however, the following are directly pertinent to the process of generating shellcode.
 
@@ -16,24 +20,48 @@ shellcode-gen TARGET_FILE_NAME [-a -t -s -r -k]
 shellcode-gen -h
 
 <options>
-TARGET_FILE_NAME       : (Optional) Specify the file with the extension 's' for generating shellcode.
--a --arch ARCHITECTURE : (Optional) Specify architecture(x86_64 or i386). If this option is unspecified, the default is set to 'x86_64'.
--t --type LITERAL_TYPE : (Optional) Specify the literal type(str, arr, or bytes) of bytes of shellcode to output. If this option is unspecified, the default is set to 'str'.
--s --syntax SYNTAX     : (Optional) Specify syntax(att or intel). If this option is unspecified, the default is set to 'att'.
--r --run               : (Optional) Run shell code by making it an executable file.
--k --keep              : (Optional) Keep the intermediate files.
+TARGET_FILE_PATH         : (Optional) Specify the file with the extension 's' for generating shellcode.
+-a --arch ARCHITECTURE   : (Optional) Specify architecture(x86_64(default) or i386).
+-t --type LITERAL_TYPE   : (Optional) Specify the literal type(str(default), arr, or bytes) of bytes of shellcode to output.
+-s --syntax SYNTAX       : (Optional) Specify syntax(att(default) or intel).
+-b --blacklist FILE_PATH : (Optional) Specify the file containing the blacklist for bytes.
+-r --run                 : (Optional) Run shell code by making it an executable file.
+-k --keep                : (Optional) Keep the intermediate files.
 
--h --help              : Print this message and then exit.
+-h --help                : Print this message and then exit.
 
 <exit code>
 0 : Success.
 1 : Failure.
 ```
 
-- If the '-a', '-t', or '-s' options are not specified, the defaults will be 'x86_64', 'str', and 'att', respectively.
+- If the '-a', '-t', or '-s' options are not specified, the defaults will be 'x86\_64', 'str', and 'att', respectively.
 - Assembly code can be provided via stdin if a target file name is not specified.
-- The location of the target file name is adjustable, similar to other options.
+- The location of the TARGET\_FILE\_PATH is adjustable, similar to other options.
 - Only the final output is sent to stdout; all other messages are directed to stderr.
+- Bytes listed in the blacklist are highlighted in red when displayed, making it easy to spot bytes that should not be used at a glance.
+- Characters considered as whitespace in C are included in the blacklist by default.
+- If there are additional bytes that require special attention, you must pass the path to the file containing them using the `--blacklist` option.
+
+## Blacklist File Syntax
+
+- Each element is separated by a whitespace character. The type and number of whitespace characters in between do not matter.
+- Only one-line comments are supported, and both of the following formats are allowed: `# comment 1`, `// comment 2`.
+- Case sensitivity is not an issue. All characters are converted to lowercase during processing.
+- The string '0x' and commas (,) are ignored.
+
+### Example of Blacklist File
+
+In most cases, simply copying and pasting the provided condition or typing it out casually will generally fit the required format.
+
+```
+0x88, 0x89, 0x8A, 0x8B, 0x8C, 0x8E, // MOV
+0xA0, 0xA1, 0xA2, 0xA3, // MOV
+0xA4, 0xA5, // MOVS
+0xB0, 0xB1, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, // MOV
+0xB8, 0xB9, 0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF, // MOV
+0xC6, 0xC7 // MOV
+```
 
 ## Example
 ### Use With I/O Redirection
