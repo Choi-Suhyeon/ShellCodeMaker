@@ -1,0 +1,282 @@
+=head1 NAME
+
+shellcode-gen - A script to generate shellcode from assembly files and manipulate the output in various formats
+
+=head1 VERSION
+
+7.0.0 (2024.09.23.)
+
+=head1 SYNOPSIS
+
+shellcode-gen [-a ARCHITECTURE] [-t LITERAL_TYPE] [-s SYNTAX] [-b BLACKLIST] [-r] [-k] TARGET_FILE.s
+
+shellcode-gen -v
+
+shellcode-gen -h
+
+shellcode-gen -m
+
+=head1 DESCRIPTION
+
+The C<shellcode-gen> script takes an assembly file as input and converts it into a shellcode in different formats. It can also run the shellcode and highlight specific bytes (like whitespace characters) in the assembly output.
+
+=over 4 
+
+=item * 
+
+If the '-a', '-t', or '-s' options are not specified, the defaults will be 'x86\_64', 'str', and 'att', respectively.
+
+=item * 
+
+The location of the TARGET\_FILE is adjustable, similar to other options.
+
+=item * 
+
+Only the final output is sent to stdout; all other messages are directed to stderr.
+
+=item * 
+
+Bytes listed in the blacklist are highlighted in red when displayed, making it easy to spot bytes that should not be used at a glance.
+
+=item * 
+
+Characters considered as whitespace in C are included in the blacklist by default.
+
+=item * 
+
+If there are additional bytes that require special attention, you must pass the path to the file containing them using the `--blacklist` option.
+
+=back
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-a>, B<--arch> <ARCHITECTURE>
+
+Specify the target architecture. Supported values are:
+
+=over 4
+
+=item * C<x86_64> - (default) AMD 64bit architecture
+
+=item * C<i386> - intel 32bit architecture
+
+=back
+
+=item B<-t>, B<--type> <TYPE>
+
+Specify the format in which to display the shellcode. Supported values are:
+
+=over 4
+
+=item * C<str> - (default) Display as a string of hex-encoded values prefixed with C<\x>.
+
+=item * C<arr> - Display as a comma-separated array of hex values prefixed with C<0x>.
+
+=item * C<bytes> - Display as raw byte data.
+
+=back
+
+=item B<-s>, B<--syntax> <SYNTAX>
+
+Specify the assembly syntax for the C<objdump> output. Supported values are:
+
+=over 4
+
+=item * C<att> - (default) AT&T syntax.
+
+=item * C<intel> - Intel syntax.
+
+=back
+
+=item B<-b>, B<--blacklist> <FILE>
+
+Specify a file containing a list of bytes to highlight in the C<objdump> output. The file can use one-line comments with C<#> or C<//>. Byte values can be specified in hexadecimal (with or without C<0x> prefix), separated by spaces (commas are ignored).
+
+=item B<-k>, B<--keep>
+
+Keep intermediate files like object and binary files. By default, these files are deleted after the script runs.
+
+=item B<-r>, B<--run>
+
+Run the generated shellcode after assembling and linking.
+
+=item B<-v>, B<--version>
+
+Display the version of the script.
+
+=item B<-h>, B<--help>
+
+Display a brief help message.
+
+=item B<-m>, B<--man>
+
+Display the full manual (this document).
+
+=back
+
+=head1 ARGUMENTS
+
+=over 4
+
+=item B<TARGET_FILE.s>
+
+The assembly file that will be processed. The file must exist and be readable, and it should have a C<.s> extension.
+
+=back
+
+=head1 EXIT STATUS
+
+The script returns the following exit statuses:
+
+=over 4
+
+=item * 0        - Success.
+
+=item * Non-zero - An error occurred.
+
+=back
+
+=head1 Blacklist File Syntax
+
+=over 4
+
+=item *
+
+Each element is separated by a whitespace character. The type and number of whitespace characters in between do not matter.
+
+=item *
+
+Only one-line comments are supported, and both of the following formats are allowed: `# comment 1`, `// comment 2`.
+
+=item *
+
+Case sensitivity is not an issue. All characters are converted to lowercase during processing.
+
+=item *
+
+The string '0x' and commas (,) are ignored.
+
+=back
+
+=head2 Example of Blacklist File
+
+In most cases, simply copying and pasting the provided condition or typing it out casually will generally fit the required format.
+
+	0x88, 0x89, 0x8A, 0x8B, 0x8C, 0x8E, // MOV
+	0xA0, 0xA1, 0xA2, 0xA3, // MOV
+	0xA4, 0xA5, // MOVS
+	0xB0, 0xB1, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, // MOV
+	0xB8, 0xB9, 0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF, // MOV
+	0xC6, 0xC7 // MOV
+
+=head1 EXAMPLES
+
+Assemble an assembly file and display the shellcode as a string of hex-encoded values:
+
+  shellcode-gen example.s
+
+Run the generated shellcode on a 32-bit architecture with running it:
+
+  shellcode-gen -r -a i386 example.s
+
+Highlight specific bytes (e.g. challenge constraints) in the C<objdump> output:
+
+  shellcode-gen -b blacklist.txt example.s
+
+Save shellcode with binary format:
+
+  shellcode-gen -t bytes example.s > shellcode
+
+
+=head2 Use With I/O Redirection
+
+    $ cat execve.s
+    .section .text
+    .global _start
+    _start:
+    xorl %ecx, %ecx
+    pushl %ecx
+    pushl $0x68732F6E
+    pushl $0x69622F2F
+    pushl $0x16
+    popl %eax
+    sarl $1, %eax
+    movl %ecx, %edx
+    movl %esp, %ebx
+    int $0x80
+    
+    $ ./shellcode-gen -a i386 -t bytes execve.s > output
+    [-------------------- ASSEMBLY WITH MACHINE CODE --------------------]
+    
+    temp_shellcode_gen6029.o:     file format elf32-i386
+    
+    
+    Disassembly of section .text:
+    
+    00000000 <_start>:
+     0:	31 c9                	xor    %ecx,%ecx
+     2:	51                   	push   %ecx
+     3:	68 6e 2f 73 68       	push   $0x68732f6e
+     8:	68 2f 2f 62 69       	push   $0x69622f2f
+     d:	6a 16                	push   $0x16
+     f:	58                   	pop    %eax
+    10:	d1 f8                	sar    %eax
+    12:	89 ca                	mov    %ecx,%edx
+    14:	89 e3                	mov    %esp,%ebx
+    16:	cd 80                	int    $0x80
+    
+    NOTE : Whitespace in C :
+    0x09(Horizontal Tab), 0x0A(Line Feed),       0x0B(Vertical Tab),
+    0x0C(Form Feed),      0x0D(Carriage Return), 0x20(Space)
+    
+    [-------------------------------------------------------------------]
+    
+    
+    $ xxd output                                              
+    00000000: 31c9 5168 6e2f 7368 682f 2f62 696a 1658  1.Qhn/shh//bij.X
+    00000010: d1f8 89ca 89e3 cd80                      ........
+
+=head2 Run Your Shellcode
+
+    $ ./shellcode-gen -r -a i386 execve.s      
+    [-------------------- ASSEMBLY WITH MACHINE CODE --------------------]
+    
+    execve.o:     file format elf32-i386
+    
+    
+    Disassembly of section .text:
+    
+    00000000 <_start>:
+     0:	31 c9                	xor    %ecx,%ecx
+     2:	51                   	push   %ecx
+     3:	68 6e 2f 73 68       	push   $0x68732f6e
+     8:	68 2f 2f 62 69       	push   $0x69622f2f
+     d:	6a 16                	push   $0x16
+     f:	58                   	pop    %eax
+    10:	d1 f8                	sar    %eax
+    12:	89 ca                	mov    %ecx,%edx
+    14:	89 e3                	mov    %esp,%ebx
+    16:	cd 80                	int    $0x80
+    
+    NOTE : Whitespace in C :
+    0x09(Horizontal Tab), 0x0A(Line Feed),       0x0B(Vertical Tab),
+    0x0C(Form Feed),      0x0D(Carriage Return), 0x20(Space)
+    
+    [-------------------------------------------------------------------]
+    
+    [-------------------------- run YOUR CODE --------------------------]
+    $ whoami
+    suhyeon
+    $ 
+    [-------------------------------------------------------------------]
+    
+    \x31\xC9\x51\x68\x6E\x2F\x73\x68\x68\x2F\x2F\x62\x69\x6A\x16\x58\xD1\xF8\x89\xCA\x89\xE3\xCD\x80
+
+=head1 LICENSE
+
+This project is licensed under the GNU General Public License v3.0
+
+=cut
+

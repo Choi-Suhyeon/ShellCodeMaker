@@ -1,197 +1,167 @@
-#!/usr/bin/env bash
+#!/usr/bin/env perl
 
 # Copyright 2024 SUHYEON CHOI
 #
-# This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation,
-# either version 3 of the License, or (at your option) any later version.
+# This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License 
+# as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 #
 # This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
 # without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-exit_with_help() {
-	echo_help() {
-		echo "$0 TARGET_FILE_NAME [-a -t -s -r -k]" 
-		echo "$0 -h" 
-		echo
-		echo "<options>" 
-		echo "TARGET_FILE_PATH         : (Optional) Specify the file with the extension 's' for generating shellcode."
-		echo "-a --arch ARCHITECTURE   : (Optional) Specify architecture(x86_64(default) or i386)."
-		echo "-t --type LITERAL_TYPE   : (Optional) Specify the literal type(str(default), arr, or bytes) of bytes of shellcode to output."
-		echo "-s --syntax SYNTAX       : (Optional) Specify syntax(att(default) or intel)."
-		echo "-b --blacklist FILE_PATH : (Optional) Specify the file containing the blacklist for bytes."
-		echo "-r --run                 : (Optional) Run shell code by making it an executable file."
-		echo "-k --keep                : (Optional) Keep the intermediate files."
-		echo
-		echo "-h --help                : Print this message and then exit."
-		echo
-		echo "<exit code>" 
-		echo 0 : Success. 
-		echo 1 : Failure. 
-	}
+use warnings;
+use strict;
+use 5.010;
+
+use Getopt::Long qw/:config no_ignore_case no_auto_abbrev/;
+use List::Util qw/all/;
+use File::Spec;
+use Pod::Usage;
+use FindBin;
+
+# Global Constants
+my %architectures = (x86_64 => 64, i386 => 32);
+my %literal_types = map { $_ => $_ } qw/str arr bytes/;
+my %syntaxes      = map { $_ => $_ } qw/att intel/;
+my $title_length  = 68;
+
+my $pod_file_name  = 'shellcode-gen.pod';
+my $pod_file_path  = File::Spec->catfile($FindBin::RealBin, $pod_file_name);
+
+die "there is no file '$pod_file_name'\n" unless -s -f -r $pod_file_path;
+
+# Main
+my %argv_parsed = &parse_arguments();
+
+my ($keep_enabled, $run_enabled, $literal, $syntax)  = @argv_parsed{qw/keep_enabled run_enabled literal_type syntax_type/};
+my ($arch, $arch_num, $blacklist_path, $target_path) = @argv_parsed{qw/arch_type arch_num blacklist_path target_path/};
+
+my $raw_name    = do { $target_path =~ /^(.+)\.s$/; $1 };
+my $bin_file    = "$raw_name.bin";
+my $object_file = "$raw_name.o";
+my $bytes       = '';
+
+do { `as --"$arch_num" -o "$object_file" "$target_path" 2> /dev/null`; ! $? } or die "assembly failed\n";
+say STDERR &objdump_with_highlight($object_file, $syntax, &get_blacklist($blacklist_path));
+&run_shellcode($raw_name, $object_file, $arch) if $run_enabled;
+do { `objcopy --dump-section .text="$bin_file" "$object_file"`; ! $? } or die "objcopy failed\n";
+
+die "the bin file either does not exist as a regular file or lacks read permission\n" unless -s -f -r $bin_file;
+
+my $hex_arr_ref = &open_with('<', $bin_file, sub {
+	read $_[0], $bytes, -s _ or die "failed to read the content in the file '$bin_file'\n";
+	[ map { sprintf '%02X', ord } $bytes =~ /./g ]
+}) or die "error is occurred while processing '$bin_file'\n";
+
+unless ($keep_enabled) {
+	unlink $object_file, $bin_file;
+	unlink $raw_name if $run_enabled;
+}
+
+if    ($literal eq 'str')   { say join '', map "\\x$_", @$hex_arr_ref;  }
+elsif ($literal eq 'arr')   { say join ', ', map "0x$_", @$hex_arr_ref; }
+elsif ($literal eq 'bytes') { say pack 'H*', join '', @$hex_arr_ref;    }
+else                        { die "unexpected options\n";               }
+
+# Subroutines
+sub open_with {
+	open my $fh, @_[0, 1] or return undef;
+
+    my $result = $_[2]->($fh);
+
+    close $fh or return undef;
+
+    $result
+}
+
+sub get_blacklist {
+	my @result         = qw/09 0a 0b 0c 0d 20/;
+	my $blacklist_path = shift;
+
+	&open_with('<', $blacklist_path, sub {
+		my $fh = shift;
+
+		while (<$fh>) {
+			s/(\#|\/\/).*|0[xX]|,/ /g;
+			push @result, map lc, grep !/^\s*$/, split /\s+/;
+		}
+	}) if defined $blacklist_path;
+
+	@result
+}
+
+sub get_title {
+	my $raw   = shift;
+	my $title = defined $raw && (length $raw) > 0 ? do { $raw =~ s/^\s+|\s+$//g; " $raw " } : '';
+	my $left  = '-' x (($title_length - length $title) / 2);
+	my $right = '-' x ($title_length - (length $title) - (length $left));
 	
-	echo_help >&2
-	exit 1
+	"[$left$title$right]"
 }
 
-exit_with_failure() {
-	echo ERROR: "$@" >&2
-	exit 1
+sub objdump_with_highlight {
+	my ($obj_file, $syntax, @blacklist) = @_;
+	
+	my $filter      = sprintf '(\s%s\s)', join '\s|\s', @blacklist;
+	my $raw_objdump = `objdump -M "$syntax" -d "$obj_file" 2>&1`;
+	my @result      = &get_title('ASSEMBLY WITH MACHINE CODE');
+
+	die "objdump is failed\n" if $? != 0;
+
+	push @result, map { s/$filter/\e[31m$1\e[0m/gi; $_ } split /\n/, $raw_objdump;
+	push @result, '', 'NOTE : Whitespace in C :';
+	push @result, '  0x09(Horizontal Tab), 0x0A(Line Feed),       0x0B(Vertical Tab),';
+	push @result, '  0x0C(Form Feed),      0x0D(Carriage Return), 0x20(Space)';
+	push @result, '', &get_title(), '';
+
+	join "\n", @result
 }
 
-echo_with_highlight() {
-	[ $# -lt 2 ] && exit 1
+sub run_shellcode {
+	my ($file_executable, $obj_file, $arch) = @_;
 
-	echo "$1" | perl -pe 'BEGIN { $regex = sprintf q/(\s%s\s)/, join q/\s|\s/, @ARGV; ($red, $reset, @ARGV) = ("\e[31m","\e[0m") } s/$regex/$red$1$reset/gi' "${@:2}"
+	do { `ld -m "elf_$arch" -o "./$file_executable" "./$obj_file" 2>&1`; ! $? } or die "link failed\n";
+
+	say STDERR &get_title('RUN YOUR CODE');
+	`./$file_executable 1>&2`;
+	say STDERR &get_title() . "\n";
 }
 
-objdump_with_highlight() {
-	[ $# -ne 3 ] && exit 1
-
-	object_file="$1"
-	syntax="$2"
-	blacklist=($3)
-	objdump_result=$(objdump -M "$syntax" -d "$object_file" 2>&1) 
-
-	[ $? -eq 0 ] || exit 1
-
-	function_body() {
-		echo [-------------------- ASSEMBLY WITH MACHINE CODE --------------------]
-
-		echo_with_highlight "$objdump_result" "${blacklist[@]}"
-
-		echo
-		echo NOTE : Whitespace in C : 
-		echo "  0x09(Horizontal Tab), 0x0A(Line Feed),       0x0B(Vertical Tab),"
-		echo "  0x0C(Form Feed),      0x0D(Carriage Return), 0x20(Space)"
-		echo
-		echo [--------------------------------------------------------------------]
-		echo
-	}
-
-	function_body >&2
+sub concat_with_or {
+	"${\join ', ', @_[0 .. $#_ - 1]} or $_[$#_]"
 }
 
-echo_bytes_blacklist() {
-	[ $# -ne 1 ] && exit 1
+sub parse_arguments {
+	my @counts        = (0, 0, 0, 0, 0, 0);
+	my %result        = (
+		keep_enabled => 0,        run_enabled    => 0,
+		literal_type => 'str' ,   syntax_type    => 'att',
+		arch_type    => 'x86_64', blacklist_path => undef,
+	);
 
-	printf '09 0a 0b 0c 0d 20 '
-	[ X$1 != X ] && perl -e 'print join q/ /, map { s/(\#|\/\/).*|0[xX]|,/ /g; map lc, grep !/^\s*$/, split /\s+/ } <>' "$1"
+	my $getopt_result = GetOptions
+		'a|arch=s'      => sub { $counts[0]++; $result{arch_type} = $_[1] },
+		't|type=s'      => sub { $counts[1]++; $result{literal_type} = $_[1] },
+		's|syntax=s'    => sub { $counts[2]++; $result{syntax_type} = $_[1] },
+		'b|blacklist=s' => sub { $counts[3]++; $result{blacklist_path} = $_[1] },
+		'k|keep'        => sub { $counts[4]++; $result{keep_enabled} = 1 },
+		'r|run'         => sub { $counts[5]++; $result{run_enabled} = 1 },
+		'v|version'     => sub { pod2usage -verbose => 99, -sections => 'NAME|VERSION', -exitval => 0, -input => $pod_file_path },
+		'h|help'        => sub { pod2usage -verbose => 1, -input => $pod_file_path },
+		'm|man'         => sub { pod2usage -verbose => 2, -input => $pod_file_path };
+
+	die "error is occurred while parsing arguments\n" unless $getopt_result;
+	die "no target file provided\n" unless @ARGV;
+	die "multiple target files provided\n" unless @ARGV == 1;
+	die "illegal options were provided\n" unless all { $_ == 0 || $_ == 1 } @counts;
+	die "invalid architecture provided. expected ${\(&concat_with_or(keys %architectures))}, but received $result{arch_type}\n" unless exists $architectures{$result{arch_type}};
+	die "invalid literal type provided. expected ${\(&concat_with_or(keys %literal_types))}, but received $result{literal_type}\n" unless exists $literal_types{$result{literal_type}};
+	die "invalid syntax provided. expected ${\(&concat_with_or(keys %syntaxes))}, but received $result{syntax_type}\n" unless exists $syntaxes{$result{syntax_type}};
+	die "the blacklist either does not exist as a regular file or lacks read permission\n" unless ! defined $result{blacklist_path} || -e -f -r $result{blacklist_path};
+	die "the target file either does not exist as a regular file or lacks read permission\n" unless -e -f -r $ARGV[0];
+	die "The target file does not have the .s extension\n" unless $ARGV[0] =~ /^.+\.s$/;
+
+	$result{arch_num}    = $architectures{$result{arch_type}};
+	$result{target_path} = shift @ARGV;
+
+	%result
 }
-
-run() {
-	[ $# -ne 2 ] && exit 1
-
-	file_executable="$1" object_file="$2"
-
-	function_body() {
-		ld -m "elf_$arch" -o "./$file_executable" "./$object_file"
-
-		echo [--------------------------- RUN YOUR CODE --------------------------]
-		"./$file_executable"
-		echo [--------------------------------------------------------------------]
-		echo
-	}
-
-	function_body >&2
-}
-
-main() {
-	help_enabled=false keep_enabled=false run_enabled=false is_from_stdin=false
-	literal_type=str   syntax=att         arch=x86_64
-	target=''          blacklist_path=''
-	argc=$#
-
-	while [ $# -gt 0 ]; do
-		case $1 in
-			-a|--arch)
-				arch=$2
-				shift 2
-				;;
-			-t|--type)
-				literal_type=$2
-				shift 2
-				;;
-			-s|--syntax)
-				syntax=$2
-				shift 2
-				;;
-			-b|--blacklist)
-				blacklist_path=$2
-				shift 2
-				;;
-			-k|--keep)
-				keep_enabled=true
-				shift
-				;;
-			-r|--run)
-				run_enabled=true
-				shift
-				;;
-			-h|--help)
-				help_enabled=true
-				shift
-				break
-				;;
-			*)
-				target=$1
-				shift
-				;;
-		esac
-	done
-
-	$help_enabled || test $argc -le 0 && exit_with_help
-
-	if [ X"$target" = X ]; then
-		target=temp_shellcode_gen$$.s
-		is_from_stdin=true
-		contents=''
-
-		while read -r line; do
-			contents="$contents$line\n"
-		done
-
-		printf '%b' "$contents" > "$target"
-
-		unset "$contents"
-		unset "$line"
-	fi
-
-	arch_num=$(perl -e 'print { x86_64 => 64, i386 => 32 }->{$ARGV[0]} // ""' "$arch")
-
-	echo "$target" | grep -Pq '^.+\.s$' || exit_with_failure "The file must have the extension 's'."
-	[ -e "$target" ] && [ -f "$target" ] || exit_with_failure "The regular file named '$target' does not exist."
-	[ -r "$target" ] || exit_with_failure 'This file is not readable.'
-	[ "$syntax" = "att" ] ||  [ "$syntax" = "intel" ] || exit_with_failure "Unsupported assembly syntax. Must be either 'att' or 'intel'."
-	echo "$literal_type" | grep -Pq '^(str|arr|bytes)$' || exit_with_failure "Unsupported literal_type. Must be among 'str', 'arr', or 'bytes'."
-	[ X"$arch_num" = X ] && exit_with_failure "Unsupported architecture. Must be either 'x86_64' or 'i386'."
-
-	raw_name=${target%.s}
-	bin_file=${raw_name}.bin
-	object_file=${raw_name}.o
-	blacklist=$(echo_bytes_blacklist "$blacklist_path")
-
-	as --"$arch_num" -o "$object_file" "$target" 2> /dev/null || exit_with_failure 'Assembly failed'
-	objdump_with_highlight "$object_file" "$syntax" "$blacklist" || exit_with_failure 'Objdump failed'
-	$run_enabled && run "$raw_name" "$object_file"
-	objcopy --dump-section .text="$bin_file" "$object_file"
-
-	split=$(hexdump -ve '/1 "%02X" " "' "$bin_file")
-
-	case "$literal_type" in
-		str)   perl -e 'print join "", map { "\\x$_" } split " ", $ARGV[0]' "$split";;
-		arr)   perl -e 'print join ", ", map { "0x$_" } split " ", $ARGV[0]' "$split";;
-		bytes) perl -e 'print pack "H*", join "", split " ", $ARGV[0]' "$split";;
-	esac
-
-	if ! $keep_enabled; then
-		rm "$object_file" "$bin_file"
-		$run_enabled && rm "$raw_name"
-		$is_from_stdin && rm "$target"
-	fi
-
-	exit 0
-}
-
-main "$@"
