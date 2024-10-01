@@ -10,7 +10,7 @@
 
 use warnings;
 use strict;
-use 5.010;
+use 5.014;
 
 use Getopt::Long qw/:config no_ignore_case no_auto_abbrev/;
 use List::Util qw/all/;
@@ -40,7 +40,7 @@ my $bin_file    = "$raw_name.bin";
 my $object_file = "$raw_name.o";
 my $bytes       = '';
 
-do { `as --"$arch_num" -o "$object_file" "$target_path" 2> /dev/null`; ! $? } or die "assembly failed\n";
+do { `as --"$arch_num" -o "$object_file" "$target_path"`; ! $? } or die "assembly failed\n";
 say STDERR &objdump_with_highlight($object_file, $syntax, &get_blacklist($blacklist_path));
 &run_shellcode($raw_name, $object_file, $arch) if $run_enabled;
 do { `objcopy --dump-section .text="$bin_file" "$object_file"`; ! $? } or die "objcopy failed\n";
@@ -91,7 +91,7 @@ sub get_blacklist {
 
 sub get_title {
 	my $raw   = shift;
-	my $title = defined $raw && (length $raw) > 0 ? do { $raw =~ s/^\s+|\s+$//g; " $raw " } : '';
+	my $title = defined $raw && (length $raw) > 0 ? " ${\$raw =~ s/^\s+|\s+$//gr} " : '';
 	my $left  = '-' x (($title_length - length $title) / 2);
 	my $right = '-' x ($title_length - (length $title) - (length $left));
 	
@@ -107,7 +107,7 @@ sub objdump_with_highlight {
 
 	die "objdump is failed\n" if $? != 0;
 
-	push @result, map { s/$filter/\e[31m$1\e[0m/gi; $_ } split /\n/, $raw_objdump;
+	push @result, map { s/$filter/\e[31m$1\e[0m/gir } split /\n/, $raw_objdump;
 	push @result, '', 'NOTE : Whitespace in C :';
 	push @result, '  0x09(Horizontal Tab), 0x0A(Line Feed),       0x0B(Vertical Tab),';
 	push @result, '  0x0C(Form Feed),      0x0D(Carriage Return), 0x20(Space)';

@@ -4,7 +4,7 @@ shellcode-gen - A script to generate shellcode from assembly files and manipulat
 
 # VERSION
 
-7.0.0 (2024.09.23.)
+7.1.0 (2024.10.01.)
 
 # SYNOPSIS
 
